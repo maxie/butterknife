@@ -5,6 +5,8 @@ import android.util.Property;
 import android.view.View;
 import java.util.Arrays;
 import java.util.List;
+
+import butterknife.shadow.EditModeShadowView;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -13,9 +15,12 @@ import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
+import static butterknife.ButterKnife.Finder.arrayOf;
+import static butterknife.ButterKnife.Finder.listOf;
 import static org.fest.assertions.api.ANDROID.assertThat;
 import static org.fest.assertions.api.Assertions.assertThat;
 import static org.fest.assertions.api.Assertions.entry;
+import static org.fest.assertions.api.Assertions.fail;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
@@ -42,10 +47,29 @@ public class ButterKnifeTest {
     }
   };
 
-  @Before @After // Clear out cache of injectors and resetters before and after each test.
+  @Before @After // Clear out cache of binders before and after each test.
   public void resetViewsCache() {
-    ButterKnife.INJECTORS.clear();
-    ButterKnife.RESETTERS.clear();
+    ButterKnife.BINDERS.clear();
+  }
+
+  @Test public void listOfFiltersNull() {
+    assertThat(listOf(null, null, null)).isEmpty();
+    assertThat(listOf("One", null, null)).containsExactly("One");
+    assertThat(listOf(null, "One", null)).containsExactly("One");
+    assertThat(listOf(null, null, "One")).containsExactly("One");
+    assertThat(listOf("One", "Two", null)).containsExactly("One", "Two");
+    assertThat(listOf("One", null, "Two")).containsExactly("One", "Two");
+    assertThat(listOf(null, "One", "Two")).containsExactly("One", "Two");
+  }
+
+  @Test public void arrayOfFiltersNull() {
+    assertThat(arrayOf(null, null, null)).isEmpty();
+    assertThat(arrayOf("One", null, null)).containsExactly("One");
+    assertThat(arrayOf(null, "One", null)).containsExactly("One");
+    assertThat(arrayOf(null, null, "One")).containsExactly("One");
+    assertThat(arrayOf("One", "Two", null)).containsExactly("One", "Two");
+    assertThat(arrayOf("One", null, "Two")).containsExactly("One", "Two");
+    assertThat(arrayOf(null, "One", "Two")).containsExactly("One", "Two");
   }
 
   @Test public void propertyAppliedToEveryView() {
@@ -96,32 +120,53 @@ public class ButterKnifeTest {
     assertThat(view3).isDisabled();
   }
 
-  @Test public void zeroInjectionsInjectDoesNotThrowException() {
+  @Test public void zeroBindingsBindDoesNotThrowException() {
     class Example {
     }
 
     Example example = new Example();
-    ButterKnife.inject(example, null, null);
-    assertThat(ButterKnife.INJECTORS).contains(entry(Example.class, ButterKnife.NO_OP));
+    ButterKnife.bind(example, null, null);
+    assertThat(ButterKnife.BINDERS).contains(entry(Example.class, ButterKnife.NOP_VIEW_BINDER));
   }
 
-  @Test public void zeroInjectionsResetDoesNotThrowException() {
+  @Test public void zeroBindingsUnbindDoesNotThrowException() {
     class Example {
     }
 
     Example example = new Example();
-    ButterKnife.reset(example);
-    assertThat(ButterKnife.RESETTERS).contains(entry(Example.class, ButterKnife.NO_OP));
+    ButterKnife.unbind(example);
+    assertThat(ButterKnife.BINDERS).contains(entry(Example.class, ButterKnife.NOP_VIEW_BINDER));
   }
 
-  @Test public void injectingKnownPackagesIsNoOp() {
-    ButterKnife.inject(new Activity());
-    assertThat(ButterKnife.INJECTORS).isEmpty();
-    ButterKnife.inject(new Object(), new Activity());
-    assertThat(ButterKnife.INJECTORS).isEmpty();
-    ButterKnife.reset(new Object());
-    assertThat(ButterKnife.RESETTERS).isEmpty();
-    ButterKnife.reset(new Activity());
-    assertThat(ButterKnife.RESETTERS).isEmpty();
+  @Test public void bindingKnownPackagesIsNoOp() {
+    ButterKnife.bind(new Activity());
+    assertThat(ButterKnife.BINDERS).isEmpty();
+    ButterKnife.bind(new Object(), new Activity());
+    assertThat(ButterKnife.BINDERS).isEmpty();
+  }
+
+  @Test public void finderThrowsNiceError() {
+    View view = new View(Robolectric.application);
+    try {
+      ButterKnife.Finder.VIEW.findRequiredView(view, android.R.id.button1, "yo mama");
+      fail("View 'button1' with ID " + android.R.id.button1 + " should not have been found.");
+    } catch (IllegalStateException e) {
+      assertThat(e).hasMessage("Required view 'button1' with ID "
+          + android.R.id.button1
+          + " for yo mama was not found. If this view is optional add '@Nullable' annotation.");
+    }
+  }
+
+  @Config(shadows = EditModeShadowView.class)
+  @Test public void finderThrowsLessNiceErrorInEditMode() {
+    View view = new View(Robolectric.application);
+    try {
+      ButterKnife.Finder.VIEW.findRequiredView(view, android.R.id.button1, "yo mama");
+      fail("View 'button1' with ID " + android.R.id.button1 + " should not have been found.");
+    } catch (IllegalStateException e) {
+      assertThat(e).hasMessage("Required view '<unavailable while editing>' "
+          + "with ID " + android.R.id.button1
+          + " for yo mama was not found. If this view is optional add '@Nullable' annotation.");
+    }
   }
 }
